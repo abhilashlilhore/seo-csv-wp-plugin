@@ -2,7 +2,7 @@
 
 /**
  * Plugin Name: CSV SEO Data
- * Description: This plugin update meta data and title
+ * Description: This plugin updates meta data for the Rank Math and Yoast SEO plugins. 
  * Version: 1.0
  * Author: Savior marketing pvt. ltd.
  * Author URI:https://savior.im/
@@ -21,22 +21,7 @@ include_once(plugin_dir_path(__FILE__) . 'api-authentication.php');
 function activetion_seo_csv_plugin()
 {
 
-    ////////////we can create table
-
-    // global $wpdb, $table_prefix;
-
-    // $wpdb_table = $table_prefix . '_seo_csv';
-
-    // $query = "CREATE TABLE IF NOT EXISTS $wpdb_table ( id INT AUTO_INCREMENT PRIMARY KEY,
-    // data TEXT,
-    // url VARCHAR(2000)) ";
-
-    // $wpdb->query($query);
-    // $query = "INSERT INTO $wpdb_table (data, url)VALUES (" . '{"name":"Test User","email":"test@example.com"}' . "," . 'https://fake-source.com/webhook' . ")";
-
-    // $wpdb->query($query);
-
-    $url = '*';
+    $url = '*';///allow all origin 
 
     update_option('allow_access_origin', $url);
 }
@@ -45,12 +30,7 @@ register_activation_hook(__FILE__, 'activetion_seo_csv_plugin');
 
 function deactive_seo_csv_plugin()
 {
-
-    // global $wpdb, $table_prefix;
-
-    // $wpdb_table = $table_prefix . '_seo_csv';
-    // $query = "TRUNCATE TABLE $wpdb_table ";
-    // $wpdb->query($query);
+    ///allow all origin
     delete_option('allow_access_origin');
 }
 register_deactivation_hook(__FILE__, 'deactive_seo_csv_plugin');
@@ -68,11 +48,11 @@ add_action('admin_menu', 'myplugin_add_settings_page');
 function myplugin_add_settings_page()
 {
     add_options_page(
-        'CSV-SEO Settings',        // Page Title
-        'CSV-SEO settings',        // Menu Title
-        'manage_options',          // Capability
-        'csv-seo-settings',       // Menu Slug
-        'seo_detector_settings_page'   // Callback Function
+        'CSV-SEO Settings', 
+        'CSV-SEO settings',
+        'manage_options', 
+        'csv-seo-settings',
+        'seo_detector_settings_page'
     );
 }
 
@@ -181,6 +161,8 @@ function seo_detector_settings_page()
                     } elseif ($_SESSION['seo_plugins']['rankmath']) {
                         $meta_title = get_post_meta($post_id, 'rank_math_title', true);
                         $meta_desc = get_post_meta($post_id, 'rank_math_description', true);
+                    }else{
+                        error_log('SEO plugin not found ');
                     }
 
                     echo '<tr>';
@@ -206,7 +188,7 @@ add_action('rest_api_init', function () {
     register_rest_route('seo-csv-data/v1', '/webhook', [
         'methods'  => 'POST',
         'callback' => 'seo_csv_handle_webhook',
-        'permission_callback' => 'seo_csv_check_auth', // Allow public access
+        'permission_callback' => 'seo_csv_check_auth',
     ]);
 });
 
@@ -214,7 +196,10 @@ function read_seo_sheet_csv($url)
 {
     $csv = file_get_contents($url);
     if ($csv === false) {
+
+        error_log("Error fetching CSV ");
         return 'Error fetching CSV';
+        
     }
 
     $rows = array_map("str_getcsv", explode("\n", $csv));
@@ -225,14 +210,8 @@ function read_seo_sheet_csv($url)
 function seo_csv_handle_webhook($request)
 {
 
-    global $wpdb, $table_prefix;
-    $wpdb_table = $table_prefix . '_seo_csv';
-
-
     $data = $request->get_json_params();
-    $json_data = json_encode($data);
-
-    //$array_res=json_decode($data);
+    $json_data = json_encode($data);    
 
     $csv_url = $data['csv_url'];
 
@@ -241,7 +220,7 @@ function seo_csv_handle_webhook($request)
     $updated_data = [];
 
     foreach ($data as $value) {
-        if (empty($value[0])) continue; // Skip if URL is empty
+        if (empty($value[0])) continue;
 
         $url = trim($value[0]);
         $new_meta_title = trim($value[1] ?? '');
@@ -254,36 +233,24 @@ function seo_csv_handle_webhook($request)
 
             if ($_SESSION['seo_plugins']['yoast']) {
                 update_post_meta($post_id, '_yoast_wpseo_title', $new_meta_title);
-                $res = update_post_meta($post_id, '_yoast_wpseo_metadesc', $new_meta_description);
+                update_post_meta($post_id, '_yoast_wpseo_metadesc', $new_meta_description);
+                $status = 1;
+                error_log("SEO data updated for $url ");
+
             } elseif ($_SESSION['seo_plugins']['rankmath']) {
                 update_post_meta($post_id, 'rank_math_title', $new_meta_title);
-                $res = update_post_meta($post_id, 'rank_math_description', $new_meta_description);
-            }
-
-            // update_post_meta($post_id, '_yoast_wpseo_title', $new_meta_title);
-            // $res = update_post_meta($post_id, '_yoast_wpseo_metadesc', $new_meta_description);
-
-            // error_log($res);
-
-            // if ($res) {
-            $status = 1;
-            // }
+                update_post_meta($post_id, 'rank_math_description', $new_meta_description);
+                $status = 1;
+                error_log("SEO data updated for $url ");
+            }else{
+                error_log('SEO plugin not found ');
+            }            
+            
         }
 
-        // Add status as a 4th column in the same row
         $value['status'] = $status;
         $updated_data[] = $value;
     }
-
-
-    $url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'unknown';
-
-
-    $wpdb->insert($wpdb_table, [
-        'data' => $json_data,
-        'url'  => $url,
-    ]);
-
 
     $fp = fopen(plugin_dir_path(__FILE__) . '/output.csv', 'w');
 
@@ -293,79 +260,9 @@ function seo_csv_handle_webhook($request)
 
     fclose($fp);
 
-
-
     return new WP_REST_Response([
         'status'   => 'success',
         'message'  => 'Webhook data stored.',
         'received' => $updated_data,
     ], 200);
 }
-// Only run if Yoast SEO is active
-
-// if (defined('WPSEO_VERSION')) {
-
-   
-//https://docs.google.com/spreadsheets/d/1x2kzy_iazOkNWoBSWchwhAqY4NDLgL5xLtbCmJp0JXk/edit?usp=sharing
-
-
-    // add_filter('wpseo_title', 'myplugin_override_yoast_title');
-
-    // function myplugin_override_yoast_title($title)
-    // {
-
-    //      error_log('process started .....');
-    //     // Example: change title for Page ID 7
-    //     if (is_page(3)) {
-    //         return 'My Custom Meta Title for Page 7';
-    //     } else {
-    //         return 'My Custom Meta Title for Page 7 fail ';
-    //     }
-
-    //     // Example: change title for a post with slug 'about'
-    //     if (is_singular('post') && get_post_field('post_name', get_the_ID()) === 'about') {
-    //         return 'Custom About Page Title';
-    //     } else {
-    //         return 'Custom About Page Title fail';
-    //     }
-
-    //     return $title; // Default title from Yoast
-    // }
-// }
-
-
-// function prefix_filter_description_example( $description ) {
-
-//      error_log('process started .....');
-
-//   if ( is_page( 3 ) ) {
-//     $description = 'My custom custom meta description';
-//   }else{
-//     $description = 'My custom custom meta description `12333';
-
-//   }
-//   return $description;
-// }
-// add_filter( 'wpseo_metadesc', 'prefix_filter_description_example' );
-
-
-// add_action('rest_api_init', function () {
-//     register_rest_route('seo-csv-data/v1', '/static-data', [
-//         'methods'  => 'GET',
-//         'callback' => 'myplugin_get_static_data',
-//         'permission_callback' => 'myplugin_check_jwt_auth', // Publicly accessible
-//     ]);
-// });
-
-// function myplugin_get_static_data($request) {
-//     $data = [
-//         'name' => 'Abhilash',
-//         'email' => 'abhilash@example.com',
-//         'message' => 'This is a static response from the WordPress REST API.',
-//     ];
-
-//     return new WP_REST_Response($data, 200);
-// }
-// function myplugin_check_jwt_auth() {
-//     return is_user_logged_in(); // This works only if JWT plugin has authenticated the user
-// }

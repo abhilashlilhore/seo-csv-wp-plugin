@@ -18,7 +18,7 @@ if (!defined("ABSPATH")) {
 // remove this url from other auth jwt plugins
 add_filter('jwt_auth_whitelist', function ($endpoints) {
     $endpoints[] = '/wp-json/seo_csv/v1/token';
-    $endpoints[] = '/wp-json/seo-csv-data/v3/webhook';
+    $endpoints[] = '/wp-json/seo-csv-data/v1/webhook';
     return $endpoints;
 });
 // remove this url from other auth jwt plugins
