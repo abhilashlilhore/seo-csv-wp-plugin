@@ -87,12 +87,12 @@ function seo_detector_settings_page()
     $_SESSION['seo_plugins'] = seo_detector_detect_seo_plugins();
 
     if (isset($_POST['allowed_origin_url'])) {
-        $url = esc_url_raw(trim($_POST['allowed_origin_url']));
+        $url =trim($_POST['allowed_origin_url']);
         update_option('allow_access_origin', $url);
         echo '<div class="updated"><p>Origin URL saved!</p></div>';
     }
 
-    $saved_url = esc_url(get_option('allow_access_origin', ''));
+    $saved_url = get_option('allow_access_origin', '');
 ?>
     <div class="wrap">
         <h1>SEO Plugin Detection</h1>
@@ -209,6 +209,8 @@ function read_seo_sheet_csv($url)
 
 function seo_csv_handle_webhook($request)
 {
+
+    $_SESSION['seo_plugins'] = seo_detector_detect_seo_plugins();
 
     $data = $request->get_json_params();
     $json_data = json_encode($data);    

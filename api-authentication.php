@@ -44,8 +44,8 @@ function check_allowed_content_origin()
     if ($allowed_origin != '*') {
         $request_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
-        if ($allowed_origin && $request_origin !== $allowed_origin) {
-            return new WP_REST_Response(['error' => 'Forbidden: Origin not allowed'], 403);
+        if ($allowed_origin && ($request_origin !== $allowed_origin)) {
+          return  new WP_REST_Response(['error' => 'Forbidden: Origin not allowed'], 403);
         }
     }
 }
@@ -53,7 +53,15 @@ function check_allowed_content_origin()
 function seo_csv_generate_token($request)
 {
 
-    check_allowed_content_origin();
+     $allowed_origin = get_option('allow_access_origin');
+
+    if ($allowed_origin != '*') {
+        $request_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+        if ($allowed_origin && ($request_origin !== $allowed_origin)) {
+            return new WP_REST_Response(['error' => 'Forbidden: Origin not allowed'], 403);
+        }
+    }
 
     $params = $request->get_json_params();
     $username = $params['username'] ?? '';
@@ -63,6 +71,8 @@ function seo_csv_generate_token($request)
 
     if (is_wp_error($user) || !user_can($user, 'administrator')) {
         return new WP_REST_Response(['error' => 'Invalid credentials or not admin'], 403);
+
+        die;
     }
 
     $secret_key = 'savior-pro'; // Keep this private and strong
@@ -99,7 +109,15 @@ function seo_csv_check_auth()
     $headers = getallheaders();
     $auth = $headers['Authorization'] ?? '';
 
-    check_allowed_content_origin();
+    $allowed_origin = get_option('allow_access_origin');
+
+    if ($allowed_origin != '*') {
+        $request_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+        if ($allowed_origin && ($request_origin !== $allowed_origin)) {
+            return new WP_REST_Response(['error' => 'Forbidden: Origin not allowed'], 403);
+        }
+    }
 
     if (!$auth || strpos($auth, 'Bearer ') !== 0) return false;
 
