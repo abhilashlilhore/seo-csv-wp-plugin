@@ -1,11 +1,7 @@
 <?php
 
 /**
- * Plugin Name: CSV SEO Data
- * Description: This plugin update meta data and title
- * Version: 1.0
- * Author: Savior marketing pvt. ltd.
- * Author URI:https://savior.im/
+ * seo-csv-data plugin API outh file 
  * 
  */
 
@@ -17,7 +13,7 @@ if (!defined("ABSPATH")) {
 
 // remove this url from other auth jwt plugins
 add_filter('jwt_auth_whitelist', function ($endpoints) {
-    $endpoints[] = '/wp-json/seo_csv/v1/token';
+    $endpoints[] = '/wp-json/seo-csv-data/v1/token';
     $endpoints[] = '/wp-json/seo-csv-data/v1/webhook';
     return $endpoints;
 });
@@ -25,7 +21,7 @@ add_filter('jwt_auth_whitelist', function ($endpoints) {
 
 
 add_action('rest_api_init', function () {
-    register_rest_route('seo_csv/v1', '/token', [
+    register_rest_route('seo-csv-data/v1', '/token', [
         'methods' => 'POST',
         'callback' => 'seo_csv_generate_token',
         'permission_callback' => '__return_true', // allow public
@@ -108,17 +104,7 @@ function seo_csv_check_auth()
 {
     $headers = getallheaders();
     $auth = $headers['Authorization'] ?? '';
-
-    $allowed_origin = get_option('allow_access_origin');
-
-    if ($allowed_origin != '*') {
-        $request_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-
-        if ($allowed_origin && ($request_origin !== $allowed_origin)) {
-            return new WP_REST_Response(['error' => 'Forbidden: Origin not allowed'], 403);
-        }
-    }
-
+  
     if (!$auth || strpos($auth, 'Bearer ') !== 0) return false;
 
     $jwt = str_replace('Bearer ', '', $auth);

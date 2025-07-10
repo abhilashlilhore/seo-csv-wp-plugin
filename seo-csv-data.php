@@ -21,7 +21,7 @@ include_once(plugin_dir_path(__FILE__) . 'api-authentication.php');
 function activetion_seo_csv_plugin()
 {
 
-    $url = '*';///allow all origin 
+    $url = '*'; ///allow all origin 
 
     update_option('allow_access_origin', $url);
 }
@@ -48,9 +48,9 @@ add_action('admin_menu', 'myplugin_add_settings_page');
 function myplugin_add_settings_page()
 {
     add_options_page(
-        'CSV-SEO Settings', 
+        'CSV-SEO Settings',
         'CSV-SEO settings',
-        'manage_options', 
+        'manage_options',
         'csv-seo-settings',
         'seo_detector_settings_page'
     );
@@ -87,7 +87,7 @@ function seo_detector_settings_page()
     $_SESSION['seo_plugins'] = seo_detector_detect_seo_plugins();
 
     if (isset($_POST['allowed_origin_url'])) {
-        $url =trim($_POST['allowed_origin_url']);
+        $url = trim($_POST['allowed_origin_url']);
         update_option('allow_access_origin', $url);
         echo '<div class="updated"><p>Origin URL saved!</p></div>';
     }
@@ -161,7 +161,7 @@ function seo_detector_settings_page()
                     } elseif ($_SESSION['seo_plugins']['rankmath']) {
                         $meta_title = get_post_meta($post_id, 'rank_math_title', true);
                         $meta_desc = get_post_meta($post_id, 'rank_math_description', true);
-                    }else{
+                    } else {
                         error_log('SEO plugin not found ');
                     }
 
@@ -199,7 +199,6 @@ function read_seo_sheet_csv($url)
 
         error_log("Error fetching CSV ");
         return 'Error fetching CSV';
-        
     }
 
     $rows = array_map("str_getcsv", explode("\n", $csv));
@@ -207,18 +206,47 @@ function read_seo_sheet_csv($url)
 }
 
 
-function seo_csv_handle_webhook($request)
+function seo_csv_handle_webhook(WP_REST_Request $request)
 {
+
+    $data = $request->get_json_params();
+
+    if (empty($data['csv_url']) || empty($data['responce_hook_url']) || empty($data['website_id'])) {
+        return new WP_REST_Response([
+            'status'  => 'error',
+            'message' => 'Missing required fields.',
+        ], 400);
+    }
+
+    $response_data = ['status' => 'accepted', 'message' => 'Processing started.'];
+    $response = new WP_REST_Response($response_data, 202);
+
+    // Send headers and end the client connection
+    echo wp_json_encode($response);
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    } else {
+        ignore_user_abort(true);
+        ob_start();
+        header('Content-Type: application/json');
+        header($_SERVER["SERVER_PROTOCOL"] . ' 202 Accepted');
+        header('Content-Length: ' . ob_get_length());
+        ob_end_flush();
+        flush();
+    }
+
 
     $_SESSION['seo_plugins'] = seo_detector_detect_seo_plugins();
 
     $data = $request->get_json_params();
-    $json_data = json_encode($data);    
+    $json_data = json_encode($data);
+
 
     $csv_url = $data['csv_url'];
+    $responce_hook_url = $data['responce_hook_url'];
+    $website_id = $data['website_id'];
 
-    $data = read_seo_sheet_csv($csv_url); // No need for quotes inside function call
-
+    $data = read_seo_sheet_csv($csv_url);
     $updated_data = [];
 
     foreach ($data as $value) {
@@ -232,39 +260,84 @@ function seo_csv_handle_webhook($request)
         $status = 0;
 
         if ($post_id) {
-
             if ($_SESSION['seo_plugins']['yoast']) {
                 update_post_meta($post_id, '_yoast_wpseo_title', $new_meta_title);
                 update_post_meta($post_id, '_yoast_wpseo_metadesc', $new_meta_description);
                 $status = 1;
                 error_log("SEO data updated for $url ");
-
             } elseif ($_SESSION['seo_plugins']['rankmath']) {
                 update_post_meta($post_id, 'rank_math_title', $new_meta_title);
                 update_post_meta($post_id, 'rank_math_description', $new_meta_description);
                 $status = 1;
                 error_log("SEO data updated for $url ");
-            }else{
-                error_log('SEO plugin not found ');
-            }            
-            
+            } else {
+                error_log("SEO plugin not found for $url");
+            }
         }
 
         $value['status'] = $status;
         $updated_data[] = $value;
     }
 
-    $fp = fopen(plugin_dir_path(__FILE__) . '/output.csv', 'w');
+    // Step 1: Save output.csv in wp-content/uploads with unique name
+    $upload_dir = wp_upload_dir();
+    $filename = 'seo-output.csv';
+    $csv_path = $upload_dir['basedir'] . '/' . $filename;
+    $csv_url  = $upload_dir['baseurl'] . '/' . $filename;
 
+    // Create the CSV file
+    $fp = fopen($csv_path, 'w');
     foreach ($updated_data as $row) {
         fputcsv($fp, $row);
     }
-
     fclose($fp);
 
-    return new WP_REST_Response([
-        'status'   => 'success',
-        'message'  => 'Webhook data stored.',
-        'received' => $updated_data,
-    ], 200);
+    // Step 2: Send webhook with the public URL
+    $webhook_payload = [
+        'website_id' => $website_id,
+        'csv_url'    => $csv_url,
+        'status'     => 'completed',
+        'message'    => 'SEO metadata updated and CSV file generated.',
+    ];
+
+    $response = wp_remote_post($responce_hook_url, [
+        'method'  => 'POST',
+        'headers' => ['Content-Type' => 'application/json'],
+        'body'    => json_encode($webhook_payload),
+        'timeout' => 15,
+    ]);
+
+    // Optional: Log webhook result
+    if (is_wp_error($response)) {
+        error_log('Webhook error: ' . $response->get_error_message());
+    } else {
+        error_log('Webhook sent: ' . wp_remote_retrieve_body($response));
+    }
+}
+
+add_action('rest_api_init', function () {
+    register_rest_route('seo-csv-data/v1', '/csv-reading-completed', [
+        'methods'  => 'POST',
+        'callback' => 'delete_seo_csv_file',
+        'permission_callback' => 'seo_csv_check_auth',
+    ]);
+});
+
+function delete_seo_csv_file()
+{
+
+    $upload_dir = wp_upload_dir();
+    $filename = 'seo-output.csv';
+    $csv_path = $upload_dir['basedir'] . '/' . $filename;
+
+    if (file_exists($csv_path)) {
+        unlink($csv_path);
+        error_log("CSV file deleted: $csv_path");
+        return new WP_REST_Response(['msg' => "CSV file deleted: $csv_path" ], 200);
+
+    } else {
+        error_log("CSV file not found for deletion: $csv_path");
+        return new WP_REST_Response(['msg' => 'CSV file not found for deletion'], 200);
+
+    }
 }
