@@ -194,13 +194,37 @@ add_action('rest_api_init', function () {
 
 function read_seo_sheet_csv($url)
 {
-    $csv = file_get_contents($url);
-    if ($csv === false) {
+    $attempts = 3;
+    $csv = false;
 
-        error_log("Error fetching CSV ");
+    // Retry mechanism
+    for ($i = 0; $i < $attempts; $i++) {
+        $csv = @file_get_contents($url); 
+        if ($csv !== false) {
+            break; // Success
+        }
+        sleep(2); // Wait 1 second before retry
+    }
+
+    // If still failed after retries
+    if ($csv === false) {
+        $message = "Failed to fetch CSV from URL after $attempts attempts: $url";
+
+        // Log the error
+        error_log($message);
+
+        // Send email to admin
+        wp_mail(
+            get_option('admin_email'),
+            'SEO Plugin Error: CSV Fetch Failed',
+            $message,
+            ['Content-Type: text/html; charset=UTF-8']
+        );
+
         return 'Error fetching CSV';
     }
 
+    // Success
     $rows = array_map("str_getcsv", explode("\n", $csv));
     return $rows;
 }
@@ -248,7 +272,7 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
 
     $data = read_seo_sheet_csv($csv_url);
     $updated_data = [];
-
+    sleep(3);
     foreach ($data as $value) {
         if (empty($value[0])) continue;
 
@@ -333,11 +357,9 @@ function delete_seo_csv_file()
     if (file_exists($csv_path)) {
         unlink($csv_path);
         error_log("CSV file deleted: $csv_path");
-        return new WP_REST_Response(['msg' => "CSV file deleted: $csv_path" ], 200);
-
+        return new WP_REST_Response(['msg' => "CSV file deleted: $csv_path"], 200);
     } else {
         error_log("CSV file not found for deletion: $csv_path");
         return new WP_REST_Response(['msg' => 'CSV file not found for deletion'], 200);
-
     }
 }

@@ -41,7 +41,7 @@ function check_allowed_content_origin()
         $request_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
         if ($allowed_origin && ($request_origin !== $allowed_origin)) {
-          return  new WP_REST_Response(['error' => 'Forbidden: Origin not allowed'], 403);
+            return  new WP_REST_Response(['error' => 'Forbidden: Origin not allowed'], 403);
         }
     }
 }
@@ -49,7 +49,7 @@ function check_allowed_content_origin()
 function seo_csv_generate_token($request)
 {
 
-     $allowed_origin = get_option('allow_access_origin');
+    $allowed_origin = get_option('allow_access_origin');
 
     if ($allowed_origin != '*') {
         $request_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
@@ -89,8 +89,7 @@ function seo_csv_generate_token($request)
 
     return new WP_REST_Response([
         'token' => $token,
-        'expires_in' => 3600,
-        'user_id' => $user->ID,
+        'expires_in' => 3600
     ]);
 }
 
@@ -102,9 +101,20 @@ function base64url_decode($data)
 
 function seo_csv_check_auth()
 {
+
+    $allowed_origin = get_option('allow_access_origin');
+
+    if ($allowed_origin != '*') {
+        $request_origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+        if ($allowed_origin && ($request_origin !== $allowed_origin)) {
+            return false;
+        }
+    }
+
     $headers = getallheaders();
     $auth = $headers['Authorization'] ?? '';
-  
+
     if (!$auth || strpos($auth, 'Bearer ') !== 0) return false;
 
     $jwt = str_replace('Bearer ', '', $auth);
