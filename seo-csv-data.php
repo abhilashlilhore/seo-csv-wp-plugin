@@ -199,7 +199,7 @@ function read_seo_sheet_csv($url)
 
     // Retry mechanism
     for ($i = 0; $i < $attempts; $i++) {
-        $csv = @file_get_contents($url); 
+        $csv = @file_get_contents($url);
         if ($csv !== false) {
             break; // Success
         }
@@ -311,6 +311,8 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
 
     // Create the CSV file
     $fp = fopen($csv_path, 'w');
+    // Write the header row
+    fputcsv($fp, ['page_url', 'meta_title', 'meta_description', 'status']);
     foreach ($updated_data as $row) {
         fputcsv($fp, $row);
     }
@@ -362,4 +364,85 @@ function delete_seo_csv_file()
         error_log("CSV file not found for deletion: $csv_path");
         return new WP_REST_Response(['msg' => 'CSV file not found for deletion'], 200);
     }
+}
+
+
+////////////adding view button 
+// Hook to add the "View Details" link
+
+add_filter('plugin_row_meta', 'seo_csv_data_add_modal_link', 10, 2);
+function seo_csv_data_add_modal_link($links, $file)
+{
+    if ($file === 'seo-csv-data/seo-csv-data.php') {
+        $links[] = '<a href="#" class="seo-csv-details-trigger">View details</a>';
+    }
+    return $links;
+}
+
+add_action('admin_footer', 'seo_csv_data_modal_markup');
+function seo_csv_data_modal_markup()
+{
+    $screen = get_current_screen();
+    if ($screen->id !== 'plugins') return;
+?>
+    <div id="seo-csv-details-modal" style="display:none; position: fixed; top: 10%; left: 50%; transform: translateX(-50%);
+        background: #fff; border: 1px solid #ccc; padding: 20px; width: 600px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+        <h2>SEO CSV Plugin Details</h2>
+        <p><strong>Version:</strong> 1.0.0</p>
+        <p><strong>Author:</strong> Your Name</p>
+        <p><strong>Description:</strong> This plugin allows you to bulk update SEO meta titles and descriptions from a CSV file. Supports Yoast & Rank Math integration.</p>
+        <p><strong>Features:</strong></p>
+        <ul>
+            <li>Bearer Token-based authentication for all endpoints</li>
+            <li>Get Token via endpoint: <code>/wp-json/seo-csv-data/v1/token</code></li>
+            <li>Submit CSV URL to process and update SEO data using: <code>/wp-json/seo-csv-data/v1/webhook</code></li>
+            <li>Supports CSV</li>
+            <li>Optional <code>response_hook_url</code> to receive processing results via POST callback</li>
+            <li>Confirms completion with: <code>/wp-json/seo-csv-data/v1/csv-reading-completed</code></li>
+            <li>CSV output includes updated SEO meta titles and descriptions</li>
+            <li>Compatible with Yoast SEO and Rank Math plugins</li>
+            <li>Error handling, logging, and status response included</li>
+        </ul>
+
+        <button id="seo-csv-close-modal" class="button">Close</button>
+    </div>
+    <div id="seo-csv-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+        background: rgba(0,0,0,0.5); z-index: 9998;"></div>
+<?php
+}
+add_action('admin_footer', 'seo_csv_data_modal_script');
+function seo_csv_data_modal_script()
+{
+    $screen = get_current_screen();
+    if ($screen->id !== 'plugins') return;
+?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const trigger = document.querySelector('.seo-csv-details-trigger');
+            const modal = document.getElementById('seo-csv-details-modal');
+            const overlay = document.getElementById('seo-csv-overlay');
+            const close = document.getElementById('seo-csv-close-modal');
+
+            if (trigger) {
+                trigger.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    modal.style.display = 'block';
+                    overlay.style.display = 'block';
+                });
+            }
+
+            if (close) {
+                close.addEventListener('click', function() {
+                    modal.style.display = 'none';
+                    overlay.style.display = 'none';
+                });
+            }
+
+            overlay.addEventListener('click', function() {
+                modal.style.display = 'none';
+                this.style.display = 'none';
+            });
+        });
+    </script>
+<?php
 }
