@@ -21,8 +21,26 @@ include_once(plugin_dir_path(__FILE__) . 'api-authentication.php');
 function activetion_seo_csv_plugin()
 {
 
-    $url = '*'; ///allow all origin 
 
+    global $wpdb, $table_prefix;
+
+    $table_name = $table_prefix . "seo_csv_logs";
+
+    $query = "CREATE TABLE IF NOT EXISTS $table_name( 
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        colom_id BIGINT,
+        csv_file_id BIGINT,
+        website_id BIGINT,
+        url TEXT,
+        meta_title TEXT,
+        meta_description TEXT,
+        status TINYINT,      
+        created_at DATETIME) ";
+
+    $wpdb->query($query);
+
+
+    $url = '*'; ///allow all origin 
     update_option('allow_access_origin', $url);
 }
 
@@ -31,6 +49,12 @@ register_activation_hook(__FILE__, 'activetion_seo_csv_plugin');
 function deactive_seo_csv_plugin()
 {
     ///allow all origin
+    global $wpdb, $table_prefix;
+
+    $wpdb_table = $table_prefix . 'seo_csv_logs';
+    $query = "TRUNCATE TABLE $wpdb_table ";
+    $wpdb->query($query);
+
     delete_option('allow_access_origin');
 }
 register_deactivation_hook(__FILE__, 'deactive_seo_csv_plugin');
@@ -79,9 +103,6 @@ function seo_detector_detect_seo_plugins()
     return $plugins;
 }
 
-
-
-// ✅ Render settings page
 function seo_detector_settings_page()
 {
     $_SESSION['seo_plugins'] = seo_detector_detect_seo_plugins();
@@ -150,8 +171,6 @@ function seo_detector_settings_page()
                     $post_url = get_permalink($post_id);
                     $post_title = get_the_title();
 
-                    // Yoast and Rank Math meta keys
-
                     $meta_title = '-';
                     $meta_desc = '-';
 
@@ -194,10 +213,10 @@ add_action('rest_api_init', function () {
 
 function read_seo_sheet_csv($url)
 {
+
     $attempts = 3;
     $csv = false;
 
-    // Retry mechanism
     for ($i = 0; $i < $attempts; $i++) {
         $csv = @file_get_contents($url);
         if ($csv !== false) {
@@ -210,7 +229,6 @@ function read_seo_sheet_csv($url)
     if ($csv === false) {
         $message = "Failed to fetch CSV from URL after $attempts attempts: $url";
 
-        // Log the error
         error_log($message);
 
         // Send email to admin
@@ -233,52 +251,80 @@ function read_seo_sheet_csv($url)
 function seo_csv_handle_webhook(WP_REST_Request $request)
 {
 
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'seo_csv_logs';
+
     $data = $request->get_json_params();
 
-    if (empty($data['csv_url']) || empty($data['responce_hook_url']) || empty($data['website_id'])) {
+    if (empty($data['csv_url']) || empty($data['responce_hook_url']) || empty($data['website_id']) || empty($data['csv_id'])) {
         return new WP_REST_Response([
             'status'  => 'error',
             'message' => 'Missing required fields.',
         ], 400);
     }
 
-    $response_data = ['status' => 'accepted', 'message' => 'Processing started.'];
-    $response = new WP_REST_Response($response_data, 202);
-
-    // Send headers and end the client connection
-    echo wp_json_encode($response);
-    if (function_exists('fastcgi_finish_request')) {
-        fastcgi_finish_request();
-    } else {
-        ignore_user_abort(true);
-        ob_start();
-        header('Content-Type: application/json');
-        header($_SERVER["SERVER_PROTOCOL"] . ' 202 Accepted');
-        header('Content-Length: ' . ob_get_length());
-        ob_end_flush();
-        flush();
-    }
-
-
     $_SESSION['seo_plugins'] = seo_detector_detect_seo_plugins();
 
     $data = $request->get_json_params();
-    $json_data = json_encode($data);
-
 
     $csv_url = $data['csv_url'];
     $responce_hook_url = $data['responce_hook_url'];
     $website_id = $data['website_id'];
+    $csv_id = $data['csv_id'];
+
+    echo $base_dir = WP_CONTENT_DIR . "/seo-csv-data/{$website_id}/{$csv_id}/";
+
+    if (!file_exists($base_dir)) {
+        wp_mkdir_p($base_dir);
+    }
+
+    $csv_file_path = $base_dir . "{$csv_id}.csv";
+    $csv_content = file_get_contents($csv_url);
+
+    if ($csv_content === false) {
+        return new WP_Error('csv_error', 'Failed to download CSV file.', ['status' => 500]);
+    }
+
+    file_put_contents($csv_file_path, $csv_content);
+    chmod($csv_file_path, 0644);
+
+
+
+
+
+    // $response_data = ['status' => 'accepted', 'message' => 'Processing started.'];
+    // $response = new WP_REST_Response($response_data, 202);
+
+    // // Send headers and end the client connection
+    // echo wp_json_encode($response);
+    // if (function_exists('fastcgi_finish_request')) {
+    //     fastcgi_finish_request();
+    // } else {
+    //     ignore_user_abort(true);
+    //     ob_start();
+    //     header('Content-Type: application/json');
+    //     header($_SERVER["SERVER_PROTOCOL"] . ' 202 Accepted');
+    //     header('Content-Length: ' . ob_get_length());
+    //     ob_end_flush();
+    //     flush();
+    // }
+
+    // echo 'folder created';
+    // die;
 
     $data = read_seo_sheet_csv($csv_url);
     $updated_data = [];
     sleep(3);
-    foreach ($data as $value) {
-        if (empty($value[0])) continue;
+    $csv_rows = array_map('str_getcsv', explode("\n", $csv_content));
+    foreach ($csv_rows  as &$row) {
+        if (empty($row[0])) continue;
 
-        $url = trim($value[0]);
-        $new_meta_title = trim($value[1] ?? '');
-        $new_meta_description = trim($value[2] ?? '');
+        $colom_id = trim($row[0]);
+        $csv_file_id = trim($row[1] ?? '');
+        $website_id = trim($row[2] ?? '');
+        $url = trim($row[3] ?? '');
+        $new_meta_title = trim($row[4] ?? '');
+        $new_meta_description = trim($row[5] ?? '');
 
         $post_id = url_to_postid($url);
         $status = 0;
@@ -299,29 +345,38 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
             }
         }
 
-        $value['status'] = $status;
-        $updated_data[] = $value;
+        // $wpdb->insert($table_name, [
+        //     'url' => $url,
+        //     'meta_title' => $new_meta_title,
+        //     'meta_description' => $new_meta_description,
+        //     'status' => $status,
+        //     'website_id' => $website_id,
+        //     'colom_id' => $colom_id,
+        //     'file_id' => $file_id,        
+        //     'created_at' => current_time('mysql')
+        // ]);     
+
+
+        // Add status to last column of the row
+        $row[7] = $status;
+
+
+        // $updated_data[] = $value;
     }
 
-    // Step 1: Save output.csv in wp-content/uploads with unique name
-    $upload_dir = wp_upload_dir();
-    $filename = 'seo-output.csv';
-    $csv_path = $upload_dir['basedir'] . '/' . $filename;
-    $csv_url  = $upload_dir['baseurl'] . '/' . $filename;
 
-    // Create the CSV file
-    $fp = fopen($csv_path, 'w');
-    // Write the header row
-    fputcsv($fp, ['page_url', 'meta_title', 'meta_description', 'status']);
-    foreach ($updated_data as $row) {
-        fputcsv($fp, $row);
+
+    $csv_final = [];
+    foreach ($csv_rows as $row) {
+        $csv_final .= implode(",", $row) . "\n";
     }
-    fclose($fp);
+    file_put_contents($csv_file_path, $csv_final);
 
     // Step 2: Send webhook with the public URL
     $webhook_payload = [
         'website_id' => $website_id,
-        'csv_url'    => $csv_url,
+        'csv_id'     => $csv_id,
+        'csv_url'    => $csv_file_path,
         'status'     => 'completed',
         'message'    => 'SEO metadata updated and CSV file generated.',
     ];
@@ -389,9 +444,9 @@ function seo_csv_data_modal_markup()
         background: #fff; border: 1px solid #ccc; padding: 20px; width: 600px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
         <h2>SEO CSV Plugin Details</h2>
         <p><strong>Version:</strong> 1.0.0</p>
-        <p><strong>Author:</strong> Your Name</p>
-        <p><strong>Description:</strong> This plugin allows you to bulk update SEO meta titles and descriptions from a CSV file. Supports Yoast & Rank Math integration.</p>
-        <p><strong>Features:</strong></p>
+        <p><strong>Author:</strong> Savior marketing pvt. ltd.</p>
+        <p><strong>Description:</strong>This plugin allows you to bulk update SEO meta titles and descriptions from a CSV file. Supports Yoast & Rank Math integration.</p>
+        <p><strong>API-Document:</strong></p>
         <ul>
             <li>Bearer Token-based authentication for all endpoints</li>
             <li>Get Token via endpoint: <code>/wp-json/seo-csv-data/v1/token</code></li>
