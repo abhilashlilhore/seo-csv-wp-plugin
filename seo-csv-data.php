@@ -9,6 +9,7 @@
  * 
  */
 
+
 if (!defined("ABSPATH")) {
 
     header("Location:/");
@@ -247,7 +248,7 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
     $data = $request->get_json_params();
 
     // Validate required fields
-    $required_fields = ['csv_url', 'responce_hook_url', 'website_id', 'csv_id'];
+    $required_fields = ['csv_url', 'responce_hook_url', 'website_id', 'csv_file_id'];
     foreach ($required_fields as $field) {
         if (empty($data[$field])) {
             return new WP_REST_Response([
@@ -261,7 +262,7 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
     $csv_url = $data['csv_url'];
     $responce_hook_url = $data['responce_hook_url'];
     $website_id = $data['website_id'];
-    $csv_id = $data['csv_id'];
+    $csv_id = $data['csv_file_id'];
     $session_seo_plugins = seo_detector_detect_seo_plugins();
 
     // Prepare directory
@@ -282,23 +283,27 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
     $response_data = ['status' => 'accepted', 'message' => 'Processing started.'];
     $response = new WP_REST_Response($response_data, 202);
     echo wp_json_encode($response);
-    if (function_exists('fastcgi_finish_request')) {
-        fastcgi_finish_request();
-    } else {
-        ignore_user_abort(true);
-        ob_start();
-        header('Content-Type: application/json');
-        header($_SERVER["SERVER_PROTOCOL"] . ' 202 Accepted');
-        header('Content-Length: ' . ob_get_length());
-        ob_end_flush();
-        flush();
-    }
+    //     if (function_exists('fastcgi_finish_request')) {
+    //         //fastcgi_finish_request();
+    // //         $response_data = ['status' => 'completed', 'message' => 'Webhook sent.'];
+    // // return new WP_REST_Response($response_data, 200);
+    //     } else {
+    //         ignore_user_abort(true);
+    //         ob_start();
+    //         header('Content-Type: application/json');
+    //         header($_SERVER["SERVER_PROTOCOL"] . ' 202 Accepted');
+    //         header('Content-Length: ' . ob_get_length());
+    //         ob_end_flush();
+    //         flush();
+    //     }
 
     // Begin background processing
     $csv_rows = array_map('str_getcsv', explode("\n", trim($csv_content)));
 
     foreach ($csv_rows as $row) {
         if (empty($row[0])) continue;
+
+
 
         $colom_id = trim($row[0]);
         $csv_file_id = trim($row[1] ?? '');
@@ -324,7 +329,7 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
         }
 
         // Insert into log table
-        $wpdb->insert($table_name, [
+        $inserted =   $wpdb->insert($table_name, [
             'post_url' => $post_url,
             'csv_url' => $csv_url,
             'meta_title' => $new_meta_title,
@@ -344,12 +349,13 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
              FROM {$table_name} 
              WHERE csv_file_id = %d AND website_id = %d",
             $csv_id,
-            $website_id
+            $website_id_new
         ),
         ARRAY_A
     );
 
-    $csv_final = "\"colom_id\",\"csv_file_id\",\"website_id\",\"post_url\",\"meta_title\",\"meta_description\",\"status\"\n";
+
+    $csv_final = "\"colom_id\",\"csv_file_id\",\"website_id\",\"page_url\",\"meta_title\",\"meta_description\",\"status\"\n";
     foreach ($rows as $row) {
         $escaped_row = array_map(function ($field) {
             $field = str_replace('"', '""', $field);
@@ -372,6 +378,7 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
         'status'     => 'completed',
         'message'    => 'SEO metadata updated and CSV file generated.',
     ];
+
 
     $response = wp_remote_post($responce_hook_url, [
         'method'  => 'POST',
@@ -466,4 +473,53 @@ function seo_csv_data_modal_script()
         });
     </script>
 <?php
+}
+
+add_action('rest_api_init', function () {
+    register_rest_route('seo-csv-data/v1', '/csv-reading-completed', [
+        'methods'  => 'POST',
+        'callback' => 'delete_seo_csv_file',
+        'permission_callback' => 'seo_csv_check_auth',
+    ]);
+});
+
+function delete_seo_csv_file(WP_REST_Request $request)
+{
+
+    $data = $request->get_json_params();
+
+    $required_fields = ['website_id', 'csv_file_id'];
+    foreach ($required_fields as $field) {
+        if (empty($data[$field])) {
+            return new WP_REST_Response([
+                'status'  => 'error',
+                'message' => "Missing required field: $field",
+            ], 400);
+        }
+    }
+
+    $website_id = $data['website_id'];
+    $csv_id     = $data['csv_file_id'];
+
+    // Build CSV file path
+    $base_dir = WP_CONTENT_DIR . "/seo-csv-data/{$website_id}/{$csv_id}/";
+    $csv_file_path = $base_dir . "{$csv_id}.csv";
+
+    // Delete file if exists
+    if (file_exists($csv_file_path)) {
+        unlink($csv_file_path);
+        error_log("CSV file deleted: $csv_file_path");
+
+        return new WP_REST_Response([
+            'status'  => 'success',
+            'message' => "CSV file deleted: $csv_file_path"
+        ], 200);
+    } else {
+        error_log("CSV file not found for deletion: $csv_file_path");
+
+        return new WP_REST_Response([
+            'status'  => 'warning',
+            'message' => "CSV file not found: $csv_file_path"
+        ], 404);
+    }
 }

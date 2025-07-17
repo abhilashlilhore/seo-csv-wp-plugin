@@ -1,12 +1,7 @@
 <?php
 
 /**
- * Plugin Name: CSV SEO Data
- * Description: This plugin update meta data and title
- * Version: 1.0
- * Author: Savior marketing pvt. ltd.
- * Author URI:https://savior.im/
- * 
+ * seo-csv-data plugin file
  */
 
 if (!defined("ABSPATH")) {
@@ -18,7 +13,8 @@ if (!defined("ABSPATH")) {
 // remove this url from other auth jwt plugins
 add_filter('jwt_auth_whitelist', function ($endpoints) {
     $endpoints[] = '/wp-json/seo-csv-data/v1/token';
-    $endpoints[] = '/wp-json/seo-csv-data/v3/webhook';
+    $endpoints[] = '/wp-json/seo-csv-data/v1/webhook';
+    $endpoints[] = '/wp-json/seo-csv-data/v1/csv-reading-completed';
     return $endpoints;
 });
 // remove this url from other auth jwt plugins
@@ -122,3 +118,4 @@ function seo_csv_check_auth()
     wp_set_current_user($user_id);
     return true;
 }
+
