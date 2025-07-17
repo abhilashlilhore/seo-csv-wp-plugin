@@ -17,7 +17,7 @@ if (!defined("ABSPATH")) {
 
 // remove this url from other auth jwt plugins
 add_filter('jwt_auth_whitelist', function ($endpoints) {
-    $endpoints[] = '/wp-json/seo_csv/v1/token';
+    $endpoints[] = '/wp-json/seo-csv-data/v1/token';
     $endpoints[] = '/wp-json/seo-csv-data/v3/webhook';
     return $endpoints;
 });
@@ -25,7 +25,7 @@ add_filter('jwt_auth_whitelist', function ($endpoints) {
 
 
 add_action('rest_api_init', function () {
-    register_rest_route('seo_csv/v1', '/token', [
+    register_rest_route('seo-csv-data/v1', '/token', [
         'methods' => 'POST',
         'callback' => 'seo_csv_generate_token',
         'permission_callback' => '__return_true', // allow public
