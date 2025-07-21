@@ -146,61 +146,127 @@ function seo_detector_settings_page()
         </form>
     </div>
 
+
+    <div class="wrap">
+        <h2>Enter URL and Fetch Response</h2>
+        <input type="text" id="custom_url" placeholder="Enter URL" style="width: 400px;" />
+        <button id="fetch_url_data" class="button button-primary">Submit</button>
+        <div id="url_response" style="margin-top: 20px;"></div>
+    </div>
+
+    <script type="text/javascript">
+        jQuery(document).ready(function($) {
+            $('#fetch_url_data').on('click', function() {
+                var url = $('#custom_url').val();
+                if (!url) {
+                    alert('Please enter a URL');
+                    return;
+                }
+
+                $('#url_response').html('Loading...');
+
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'custom_fetch_url',
+                        custom_url: url,
+                        _ajax_nonce: '<?php echo wp_create_nonce("custom_url_nonce"); ?>'
+                    },
+                    success: function(response) {
+                        $('#url_response').html('<pre>' + response.data + '</pre>');
+                    },
+                    error: function(xhr) {
+                        $('#url_response').html('<p style="color:red;">Error occurred.</p>');
+                    }
+                });
+
+            });
+        });
+    </script>
+
+
     <h2 style="margin-top:40px;">All Posts with Meta Title and Description</h2>
 
-    <table class="widefat fixed striped">
-        <thead>
-            <tr>
-                <th>Post Title</th>
-                <th>Post URL</th>
-                <th>Meta Title</th>
-                <th>Meta Description</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php
-            $args = [
-                'post_type' => 'post',
-                'posts_per_page' => -1,
-                'post_status' => 'publish',
-            ];
-            $query = new WP_Query($args);
+    <div id="csv-popup-modal" style="display:none; position:fixed; top:10%; left:10%; width:80%; height:80%; background:#fff; border:1px solid #ccc; overflow:auto; z-index:9999; padding:20px;">
+        <button id="close-csv-modal" style="float:right;">Close</button>
+        <div id="csv-popup-content">Loading...</div>
+    </div>
 
-            if ($query->have_posts()) {
-                while ($query->have_posts()) {
-                    $query->the_post();
-                    $post_id = get_the_ID();
-                    $post_url = get_permalink($post_id);
-                    $post_title = get_the_title();
+    <?php
+    global $wpdb, $table_prefix;
+    $table_name = $table_prefix . "seo_csv_logs";
 
-                    $meta_title = '-';
-                    $meta_desc = '-';
+    $csv_files = $wpdb->get_results("SELECT DISTINCT csv_file_id, csv_url FROM $table_name ORDER BY id DESC");
 
-                    if ($_SESSION['seo_plugins']['yoast']) {
-                        $meta_title = get_post_meta($post_id, '_yoast_wpseo_title', true);
-                        $meta_desc = get_post_meta($post_id, '_yoast_wpseo_metadesc', true);
-                    } elseif ($_SESSION['seo_plugins']['rankmath']) {
-                        $meta_title = get_post_meta($post_id, 'rank_math_title', true);
-                        $meta_desc = get_post_meta($post_id, 'rank_math_description', true);
-                    } else {
-                        error_log('SEO plugin not found ');
-                    }
+    if ($csv_files) {
+        echo '<table class="widefat striped">';
+        echo '<thead><tr><th>CSV File ID</th><th>CSV URL</th><th>Action</th></tr></thead><tbody>';
 
-                    echo '<tr>';
-                    echo '<td>' . esc_html($post_title) . '</td>';
-                    echo '<td><a href="' . esc_url($post_url) . '" target="_blank">' . esc_url($post_url) . '</a></td>';
-                    echo '<td>' . esc_html($meta_title ?: '—') . '</td>';
-                    echo '<td>' . esc_html($meta_desc ?: '—') . '</td>';
-                    echo '</tr>';
-                }
-                wp_reset_postdata();
-            } else {
-                echo '<tr><td colspan="4">No posts found.</td></tr>';
-            }
-            ?>
-        </tbody>
-    </table>
-<?php
+        foreach ($csv_files as $file) {
+            echo '<tr>';
+            echo '<td>' . esc_html($file->csv_file_id) . '</td>';
+            echo '<td><a href="' . esc_url($file->csv_url) . '" target="_blank">' . esc_html($file->csv_url) . '</a></td>';
+            echo '<td><a class="button" href="' . admin_url('admin.php?page=seo-csv-view&csv_file_id=' . esc_attr($file->csv_file_id)) . '">View</a></td>';
+
+            echo '</tr>';
+        }
+
+        echo '</tbody></table>';
+    } else {
+        echo '<p>No CSV file records found.</p>';
+    }
+}
+
+add_action('admin_menu', function () {
+    add_menu_page('SEO CSV', 'SEO CSV', 'manage_options', 'seo-csv-main', 'seo_csv_main_page');
+    add_submenu_page(null, 'View CSV Data', 'View CSV Data', 'manage_options', 'seo-csv-view', 'seo_csv_view_page');
+});
+
+
+function seo_csv_view_page()
+{
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+
+    global $wpdb, $table_prefix;
+    $table_name = $table_prefix . "seo_csv_logs";
+
+    $csv_file_id = isset($_GET['csv_file_id']) ? intval($_GET['csv_file_id']) : 0;
+
+    if (!$csv_file_id) {
+        echo '<div class="notice notice-error"><p>Invalid CSV File ID</p></div>';
+        return;
+    }
+
+    echo '<div class="wrap"><h1>CSV File Details: ID ' . esc_html($csv_file_id) . '</h1>';
+
+    $rows = $wpdb->get_results(
+        $wpdb->prepare("SELECT * FROM $table_name WHERE csv_file_id = %d", $csv_file_id)
+    );
+
+    if ($rows) {
+        echo '<table class="widefat striped">';
+        echo '<thead><tr><th>Post URL</th><th>Meta Title</th><th>Meta Description</th><th>Status</th><th>Created At</th></tr></thead><tbody>';
+
+        foreach ($rows as $row) {
+            echo '<tr>';
+            echo '<td><a href="' . esc_url($row->post_url) . '" target="_blank">' . esc_html($row->post_url) . '</a></td>';
+            echo '<td>' . esc_html($row->meta_title ?: '—') . '</td>';
+            echo '<td>' . esc_html($row->meta_description ?: '—') . '</td>';
+            echo '<td>' . esc_html($row->status ? '✅' : '❌') . '</td>';
+            echo '<td>' . esc_html($row->created_at) . '</td>';
+            echo '</tr>';
+        }
+
+        echo '</tbody></table>';
+    } else {
+        echo '<p>No data found for this CSV file.</p>';
+    }
+
+    echo '<p><a href="' . admin_url('admin.php?page=seo-csv-main') . '" class="button">← Back to CSV List</a></p>';
+    echo '</div>';
 }
 
 //////////////////////////// create a webhook end point ///////////
@@ -412,7 +478,7 @@ function seo_csv_data_modal_markup()
 {
     $screen = get_current_screen();
     if ($screen->id !== 'plugins') return;
-?>
+    ?>
     <div id="seo-csv-details-modal" style="display:none; position: fixed; top: 10%; left: 50%; transform: translateX(-50%);
         background: #fff; border: 1px solid #ccc; padding: 20px; width: 600px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
         <h2>SEO CSV Plugin Details</h2>
