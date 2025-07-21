@@ -147,51 +147,8 @@ function seo_detector_settings_page()
     </div>
 
 
-    <div class="wrap">
-        <h2>Enter URL and Fetch Response</h2>
-        <input type="text" id="custom_url" placeholder="Enter URL" style="width: 400px;" />
-        <button id="fetch_url_data" class="button button-primary">Submit</button>
-        <div id="url_response" style="margin-top: 20px;"></div>
-    </div>
-
-    <script type="text/javascript">
-        jQuery(document).ready(function($) {
-            $('#fetch_url_data').on('click', function() {
-                var url = $('#custom_url').val();
-                if (!url) {
-                    alert('Please enter a URL');
-                    return;
-                }
-
-                $('#url_response').html('Loading...');
-
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'custom_fetch_url',
-                        custom_url: url,
-                        _ajax_nonce: '<?php echo wp_create_nonce("custom_url_nonce"); ?>'
-                    },
-                    success: function(response) {
-                        $('#url_response').html('<pre>' + response.data + '</pre>');
-                    },
-                    error: function(xhr) {
-                        $('#url_response').html('<p style="color:red;">Error occurred.</p>');
-                    }
-                });
-
-            });
-        });
-    </script>
-
-
     <h2 style="margin-top:40px;">All Posts with Meta Title and Description</h2>
 
-    <div id="csv-popup-modal" style="display:none; position:fixed; top:10%; left:10%; width:80%; height:80%; background:#fff; border:1px solid #ccc; overflow:auto; z-index:9999; padding:20px;">
-        <button id="close-csv-modal" style="float:right;">Close</button>
-        <div id="csv-popup-content">Loading...</div>
-    </div>
 
     <?php
     global $wpdb, $table_prefix;
@@ -219,13 +176,27 @@ function seo_detector_settings_page()
 }
 
 
+add_action('admin_menu', function () {
+    add_menu_page('SEO CSV Main', 'SEO CSV', 'manage_options', 'seo-csv-main', 'seo_csv_main_page');
+
+    // Use the same slug as the parent
+    add_submenu_page(
+        'seo-csv-main',              // parent slug
+        'CSV View',                  // page title
+        '',                          // empty menu label (won’t show in menu)
+        'manage_options',
+        'seo-csv-view',
+        'seo_csv_view_page'
+    );
+});
+
 
 
 function seo_csv_view_page()
 {
-    if (!current_user_can('manage_options')) {
-        return;
-    }
+    // if (!current_user_can('manage_options')) {
+    //     return;
+    // }
 
     global $wpdb, $table_prefix;
     $table_name = $table_prefix . "seo_csv_logs";
@@ -274,6 +245,12 @@ add_action('rest_api_init', function () {
         'callback' => 'seo_csv_handle_webhook',
         'permission_callback' => 'seo_csv_check_auth',
     ]);
+
+    register_rest_route('seo-csv-data/v1', '/background-process', [
+        'methods'  => 'POST',
+        'callback' => 'seo_csv_background_process',
+        'permission_callback' => '__return_true',
+    ]);
 });
 
 function read_seo_sheet_csv($url)
@@ -306,67 +283,66 @@ function read_seo_sheet_csv($url)
 
 function seo_csv_handle_webhook(WP_REST_Request $request)
 {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'seo_csv_logs';
-    $data = $request->get_json_params();
+    check_allowed_content_origin();
 
-    // Validate required fields
+    $data = $request->get_json_params();
     $required_fields = ['csv_url', 'responce_hook_url', 'website_id', 'csv_file_id'];
+
     foreach ($required_fields as $field) {
         if (empty($data[$field])) {
             return new WP_REST_Response([
-                'status'  => 'error',
-                'message' => "Missing required field: $field",
+                'status' => 'error',
+                'message' => "Missing required field: $field"
             ], 400);
         }
     }
 
-    // Extract input
+    // Return response quickly
+    $response = ['status' => 'accepted', 'message' => 'Processing started.'];
+    wp_remote_post(home_url('/wp-json/seo-csv-data/v1/background-process'), [
+        'timeout' => 0.01,
+        'blocking' => false,
+        'body' => json_encode($data),
+        'headers' => [
+            'Content-Type' => 'application/json'
+        ],
+    ]);
+
+    $response_data = ['status' => 'accepted', 'message' => 'Processing started.'];
+    $response = new WP_REST_Response($response_data, 202);
+    echo wp_json_encode($response);
+}
+
+function seo_csv_background_process(WP_REST_Request $request)
+{
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'seo_csv_logs';
+    $data = $request->get_json_params();
+
     $csv_url = $data['csv_url'];
     $responce_hook_url = $data['responce_hook_url'];
     $website_id = $data['website_id'];
     $csv_id = $data['csv_file_id'];
+
     $session_seo_plugins = seo_detector_detect_seo_plugins();
 
-    // Prepare directory
     $base_dir = WP_CONTENT_DIR . "/seo-csv-data/{$website_id}/{$csv_id}/";
     wp_mkdir_p($base_dir);
     $csv_file_path = $base_dir . "{$csv_id}.csv";
 
-    // Fetch CSV content
     $csv_content = read_seo_sheet_csv($csv_url);
     if ($csv_content === false) {
-        return new WP_Error('csv_error', 'Failed to download CSV file.', ['status' => 500]);
+        error_log("Failed to download CSV file.");
+        return new WP_REST_Response(['status' => 'error'], 500);
     }
 
     file_put_contents($csv_file_path, $csv_content);
     chmod($csv_file_path, 0644);
 
-    // Respond to client immediately
-    $response_data = ['status' => 'accepted', 'message' => 'Processing started.'];
-    $response = new WP_REST_Response($response_data, 202);
-    echo wp_json_encode($response);
-    //     if (function_exists('fastcgi_finish_request')) {
-    //         //fastcgi_finish_request();
-    // //         $response_data = ['status' => 'completed', 'message' => 'Webhook sent.'];
-    // // return new WP_REST_Response($response_data, 200);
-    //     } else {
-    //         ignore_user_abort(true);
-    //         ob_start();
-    //         header('Content-Type: application/json');
-    //         header($_SERVER["SERVER_PROTOCOL"] . ' 202 Accepted');
-    //         header('Content-Length: ' . ob_get_length());
-    //         ob_end_flush();
-    //         flush();
-    //     }
-
-    // Begin background processing
     $csv_rows = array_map('str_getcsv', explode("\n", trim($csv_content)));
 
     foreach ($csv_rows as $row) {
         if (empty($row[0])) continue;
-
-
 
         $colom_id = trim($row[0]);
         $csv_file_id = trim($row[1] ?? '');
@@ -386,13 +362,10 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
                 update_post_meta($post_id, 'rank_math_title', $new_meta_title);
                 update_post_meta($post_id, 'rank_math_description', $new_meta_description);
                 $status = 1;
-            } else {
-                error_log("No SEO plugin found for $post_url");
             }
         }
 
-        // Insert into log table
-        $inserted =   $wpdb->insert($table_name, [
+        $wpdb->insert($table_name, [
             'post_url' => $post_url,
             'csv_url' => $csv_url,
             'meta_title' => $new_meta_title,
@@ -405,18 +378,16 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
         ]);
     }
 
-    // Regenerate CSV with status
     $rows = $wpdb->get_results(
         $wpdb->prepare(
             "SELECT colom_id, csv_file_id, website_id, post_url, meta_title, meta_description, status 
              FROM {$table_name} 
              WHERE csv_file_id = %d AND website_id = %d",
             $csv_id,
-            $website_id_new
+            $website_id
         ),
         ARRAY_A
     );
-
 
     $csv_final = "\"colom_id\",\"csv_file_id\",\"website_id\",\"page_url\",\"meta_title\",\"meta_description\",\"status\"\n";
     foreach ($rows as $row) {
@@ -429,11 +400,9 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
 
     file_put_contents($csv_file_path, $csv_final);
 
-    // Build public URL
     $relative_path = "wp-content/seo-csv-data/{$website_id}/{$csv_id}/{$csv_id}.csv";
     $public_url = site_url($relative_path);
 
-    // Send webhook
     $webhook_payload = [
         'website_id' => $website_id,
         'csv_id'     => $csv_id,
@@ -442,7 +411,7 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
         'message'    => 'SEO metadata updated and CSV file generated.',
     ];
 
-
+    sleep(5);
     $response = wp_remote_post($responce_hook_url, [
         'method'  => 'POST',
         'headers' => ['Content-Type' => 'application/json'],
@@ -455,9 +424,9 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
     } else {
         error_log('Webhook sent successfully: ' . wp_remote_retrieve_body($response));
     }
+
+    return new WP_REST_Response(['status' => 'processed'], 200);
 }
-
-
 ////////////adding view button 
 // Hook to add the "View Details" link
 
@@ -586,37 +555,3 @@ function delete_seo_csv_file(WP_REST_Request $request)
         ], 404);
     }
 }
-
-
-
-/////////////
-add_action('wp_ajax_custom_fetch_url', 'handle_custom_fetch_url');
-function handle_custom_fetch_url() {
-    check_ajax_referer('custom_url_nonce');
-
-    $url = esc_url_raw($_POST['custom_url'] ?? '');
-    if (empty($url)) {
-        wp_send_json_error('Invalid URL');
-    }
-
-    // Static test data to send with POST request
-    $post_data = [
-        'name'  => 'Test User',
-        'email' => 'test@example.com',
-    ];
-
-    $response = wp_remote_post($url, [
-        'method'      => 'POST',
-        'timeout'     => 10,
-        'headers'     => ['Content-Type' => 'application/x-www-form-urlencoded'],
-        'body'        => $post_data,
-    ]);
-
-    if (is_wp_error($response)) {
-        wp_send_json_error('Request failed: ' . $response->get_error_message());
-    }
-
-    $body = wp_remote_retrieve_body($response);
-    wp_send_json_success(esc_html($body));
-}
-
