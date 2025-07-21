@@ -218,10 +218,7 @@ function seo_detector_settings_page()
     }
 }
 
-add_action('admin_menu', function () {
-    add_menu_page('SEO CSV', 'SEO CSV', 'manage_options', 'seo-csv-main', 'seo_csv_main_page');
-    add_submenu_page(null, 'View CSV Data', 'View CSV Data', 'manage_options', 'seo-csv-view', 'seo_csv_view_page');
-});
+
 
 
 function seo_csv_view_page()
@@ -589,3 +586,37 @@ function delete_seo_csv_file(WP_REST_Request $request)
         ], 404);
     }
 }
+
+
+
+/////////////
+add_action('wp_ajax_custom_fetch_url', 'handle_custom_fetch_url');
+function handle_custom_fetch_url() {
+    check_ajax_referer('custom_url_nonce');
+
+    $url = esc_url_raw($_POST['custom_url'] ?? '');
+    if (empty($url)) {
+        wp_send_json_error('Invalid URL');
+    }
+
+    // Static test data to send with POST request
+    $post_data = [
+        'name'  => 'Test User',
+        'email' => 'test@example.com',
+    ];
+
+    $response = wp_remote_post($url, [
+        'method'      => 'POST',
+        'timeout'     => 10,
+        'headers'     => ['Content-Type' => 'application/x-www-form-urlencoded'],
+        'body'        => $post_data,
+    ]);
+
+    if (is_wp_error($response)) {
+        wp_send_json_error('Request failed: ' . $response->get_error_message());
+    }
+
+    $body = wp_remote_retrieve_body($response);
+    wp_send_json_success(esc_html($body));
+}
+
