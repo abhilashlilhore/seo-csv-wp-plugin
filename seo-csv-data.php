@@ -61,14 +61,6 @@ function deactive_seo_csv_plugin()
 }
 register_deactivation_hook(__FILE__, 'deactive_seo_csv_plugin');
 
-add_shortcode('seo-csv', 'show_seo_plugin');
-
-function show_seo_plugin()
-{
-
-    return "This is seo csv plugin";
-}
-
 add_action('admin_menu', 'myplugin_add_settings_page');
 
 function myplugin_add_settings_page()
@@ -147,7 +139,7 @@ function seo_detector_settings_page()
     </div>
 
 
-    <h2 style="margin-top:40px;">All Posts with Meta Title and Description</h2>
+    <h2 style="margin-top:40px;">All uploaded CSV files</h2>
 
 
     <?php
