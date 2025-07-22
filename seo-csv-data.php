@@ -29,7 +29,7 @@ function activetion_seo_csv_plugin()
 
     $query = "CREATE TABLE IF NOT EXISTS $table_name( 
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
-        colom_id BIGINT,
+        column_id BIGINT,
         csv_file_id BIGINT,
         website_id BIGINT,
         post_url TEXT,
@@ -297,6 +297,21 @@ function seo_csv_handle_webhook(WP_REST_Request $request)
         }
     }
 
+    $website_id = $data['website_id'];
+    $csv_id = $data['csv_file_id'];
+
+    // Define path to CSV file
+    $base_dir = WP_CONTENT_DIR . "/seo-csv-data/{$website_id}/{$csv_id}/";
+    $csv_file_path = $base_dir . "{$csv_id}.csv";
+
+    // If file already exists, stop and return a message
+    if (file_exists($csv_file_path)) {
+        return new WP_REST_Response([
+            'status' => 'error',
+            'message' => 'CSV file already exists. Skipping processing.',
+        ], 200);
+    }
+
     // Return response quickly
     $response = ['status' => 'accepted', 'message' => 'Processing started.'];
     wp_remote_post(home_url('/wp-json/seo-csv-data/v1/background-process'), [
@@ -344,7 +359,7 @@ function seo_csv_background_process(WP_REST_Request $request)
     foreach ($csv_rows as $row) {
         if (empty($row[0])) continue;
 
-        $colom_id = trim($row[0]);
+        $column_id = trim($row[0]);
         $csv_file_id = trim($row[1] ?? '');
         $website_id_new = trim($row[2] ?? '');
         $post_url = trim($row[3] ?? '');
@@ -372,7 +387,7 @@ function seo_csv_background_process(WP_REST_Request $request)
             'meta_description' => $new_meta_description,
             'status' => $status,
             'website_id' => $website_id_new,
-            'colom_id' => $colom_id,
+            'column_id' => $column_id,
             'csv_file_id' => $csv_file_id,
             'created_at' => current_time('mysql'),
         ]);
@@ -380,7 +395,7 @@ function seo_csv_background_process(WP_REST_Request $request)
 
     $rows = $wpdb->get_results(
         $wpdb->prepare(
-            "SELECT colom_id, csv_file_id, website_id, post_url, meta_title, meta_description, status 
+            "SELECT column_id, csv_file_id, website_id, post_url, meta_title, meta_description, status 
              FROM {$table_name} 
              WHERE csv_file_id = %d AND website_id = %d",
             $csv_id,
@@ -389,7 +404,7 @@ function seo_csv_background_process(WP_REST_Request $request)
         ARRAY_A
     );
 
-    $csv_final = "\"colom_id\",\"csv_file_id\",\"website_id\",\"page_url\",\"meta_title\",\"meta_description\",\"status\"\n";
+    $csv_final = "\"id\",\"csv_file_id\",\"website_id\",\"page_url\",\"meta_title\",\"meta_description\",\"status\"\n";
     foreach ($rows as $row) {
         $escaped_row = array_map(function ($field) {
             $field = str_replace('"', '""', $field);
@@ -410,8 +425,6 @@ function seo_csv_background_process(WP_REST_Request $request)
         'status'     => 'completed',
         'message'    => 'SEO metadata updated and CSV file generated.',
     ];
-
-    sleep(5);
     $response = wp_remote_post($responce_hook_url, [
         'method'  => 'POST',
         'headers' => ['Content-Type' => 'application/json'],
@@ -517,7 +530,6 @@ add_action('rest_api_init', function () {
 
 function delete_seo_csv_file(WP_REST_Request $request)
 {
-
     $data = $request->get_json_params();
 
     $required_fields = ['website_id', 'csv_file_id'];
@@ -533,18 +545,23 @@ function delete_seo_csv_file(WP_REST_Request $request)
     $website_id = $data['website_id'];
     $csv_id     = $data['csv_file_id'];
 
-    // Build CSV file path
     $base_dir = WP_CONTENT_DIR . "/seo-csv-data/{$website_id}/{$csv_id}/";
     $csv_file_path = $base_dir . "{$csv_id}.csv";
 
-    // Delete file if exists
+    // Delete CSV file if it exists
     if (file_exists($csv_file_path)) {
         unlink($csv_file_path);
         error_log("CSV file deleted: $csv_file_path");
 
+        // Now try to delete the folder (only if empty)
+        if (is_dir($base_dir) && count(scandir($base_dir)) === 2) { // only '.' and '..'
+            rmdir($base_dir);
+            error_log("CSV folder deleted: $base_dir");
+        }
+
         return new WP_REST_Response([
             'status'  => 'success',
-            'message' => "CSV file deleted: $csv_file_path"
+            'message' => "CSV file and folder deleted."
         ], 200);
     } else {
         error_log("CSV file not found for deletion: $csv_file_path");
@@ -555,3 +572,4 @@ function delete_seo_csv_file(WP_REST_Request $request)
         ], 404);
     }
 }
+
