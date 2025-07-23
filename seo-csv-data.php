@@ -73,6 +73,19 @@ function myplugin_add_settings_page()
         'seo_detector_settings_page'
     );
 }
+add_action('admin_menu', function () {
+   // add_menu_page('SEO CSV Main', '', 'manage_options', 'seo-csv-main', 'seo_csv_main_page');
+
+    // Use the same slug as the parent
+    add_submenu_page(
+        'seo-csv-main',
+        'CSV View', 
+        '',                
+        'manage_options',
+        'seo-csv-view',
+        'seo_csv_view_page'
+    );
+});
 
 // Add settings link on plugin page
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'myplugin_settings_link');
@@ -83,6 +96,21 @@ function myplugin_settings_link($links)
     array_unshift($links, $settings_link); // Put it first
     return $links;
 }
+
+function seo_csv_plugin_enqueue_admin_css($hook)
+{
+    // Check if we are on the correct plugin settings page
+    if (isset($_GET['page']) && ($_GET['page'] === 'csv-seo-settings' || $_GET['page'] === 'seo-csv-view')) {
+        wp_enqueue_style(
+            'seo-csv-admin-style',
+            plugin_dir_url(__FILE__) . 'style.css',
+            [],
+            '1.0.0'
+        );
+    }
+}
+add_action('admin_enqueue_scripts', 'seo_csv_plugin_enqueue_admin_css');
+
 
 
 function seo_detector_detect_seo_plugins()
@@ -110,39 +138,64 @@ function seo_detector_settings_page()
     $saved_url = get_option('allow_access_origin', '');
 ?>
     <div class="wrap">
-        <h1>SEO Plugin Detection</h1>
-        <form>
-            <label><strong>Active SEO Plugins:</strong></label><br><br>
-
-            <input type="checkbox" disabled <?php checked($_SESSION['seo_plugins']['rankmath']); ?>> Rank Math SEO<br>
-            <input type="checkbox" disabled <?php checked($_SESSION['seo_plugins']['yoast']); ?>> Yoast SEO<br>
-
-            <?php
-            $none_of_the_above = false;
-            if (!$_SESSION['seo_plugins']['rankmath'] && !$_SESSION['seo_plugins']['yoast']) {
-                $none_of_the_above = true;
-            }
-            ?>
-            <input type="checkbox" disabled <?php checked($none_of_the_above, true); ?>> None of the above<br>
-
-        </form>
+        <h1>SEO Plugin Settings</h1>
     </div>
 
     <div class="wrap">
-        <h2>Set Allowed Origin URL</h2>
+        <h2>Installed SEO plugins</h2>
+        <br>
+        <!-- <form> -->
+        <?php
+        $none_of_the_above = false;
+        if (!$_SESSION['seo_plugins']['rankmath'] && !$_SESSION['seo_plugins']['yoast']) {
+            $none_of_the_above = true;
+        }
+        ?>
+
+        <table>
+            <tr>
+                <td><strong class="seo-csv-font-15" style="padding-right:70px;">Rank Math SEO</strong></td>
+                <td><strong><?php if ($_SESSION['seo_plugins']['rankmath']) {
+                                echo '✅';
+                            } else {
+                                echo '❌';
+                            } ?></strong></td>
+            </tr>
+            <tr>
+                <td><strong class="seo-csv-font-15">Yoast SEO</strong></td>
+                <td><strong><?php if ($_SESSION['seo_plugins']['yoast']) {
+                                echo '✅';
+                            } else {
+                                echo '❌';
+                            } ?></strong></td>
+            </tr>
+            <tr>
+                <td><strong class="seo-csv-font-15">None of the above</strong></td>
+                <td><strong><?php if ($none_of_the_above) {
+                                echo '✅';
+                            } else {
+                                echo '❌';
+                            } ?></strong></td>
+            </tr>
+        </table>
+    </div>
+    <hr>
+    <div class="wrap">
+        <h2>Set Allowed Origin URL</h2><br>
         <form method="post">
-            <label for="allowed_origin_url">Allowed Origin URL:</label>
+            <label for="allowed_origin_url"><strong class="seo-csv-font-15">Allowed Origin URL:</strong></label>&nbsp;&nbsp;
             <input type="" name="allowed_origin_url" id="allowed_origin_url" value="<?php echo esc_attr($saved_url); ?>" required style="width: 400px;" />
             <br><br>
             <input type="submit" value="Save" class="button button-primary" />
         </form>
     </div>
+    <hr>
 
+    <div class="wrap">
+        <h2 style="margin-top:40px;">All uploaded CSV files</h2><br>
 
-    <h2 style="margin-top:40px;">All uploaded CSV files</h2>
-
-
-    <?php
+    </div>
+<?php
     global $wpdb, $table_prefix;
     $table_name = $table_prefix . "seo_csv_logs";
 
@@ -150,13 +203,17 @@ function seo_detector_settings_page()
 
     if ($csv_files) {
         echo '<table class="widefat striped">';
-        echo '<thead><tr><th>CSV File ID</th><th>CSV URL</th><th>Action</th></tr></thead><tbody>';
+        echo '<thead><tr><th>File ID</th><th>File name</th><th>Action</th></tr></thead><tbody>';
 
         foreach ($csv_files as $file) {
+            $parts = explode('/', $file->csv_url);
+            $csv_file_name = end($parts);
             echo '<tr>';
             echo '<td>' . esc_html($file->csv_file_id) . '</td>';
-            echo '<td><a href="' . esc_url($file->csv_url) . '" target="_blank">' . esc_html($file->csv_url) . '</a></td>';
-            echo '<td><a class="button" href="' . admin_url('admin.php?page=seo-csv-view&csv_file_id=' . esc_attr($file->csv_file_id)) . '">View</a></td>';
+            echo '<td> ' . esc_html($csv_file_name) . ' </td>';
+            echo '<td><a class="button" href="' . esc_url($file->csv_url) . '" target="_blank">Download original file</a>
+            <a class="button" href="' . admin_url('admin.php?page=seo-csv-view&file_id=' . esc_attr($file->csv_file_id) . '&file_name=' . esc_attr($csv_file_name)) . '">View</a>
+            </td>';
 
             echo '</tr>';
         }
@@ -167,20 +224,11 @@ function seo_detector_settings_page()
     }
 }
 
+?>
 
-add_action('admin_menu', function () {
-    add_menu_page('SEO CSV Main', 'SEO CSV', 'manage_options', 'seo-csv-main', 'seo_csv_main_page');
+<?php
 
-    // Use the same slug as the parent
-    add_submenu_page(
-        'seo-csv-main',              // parent slug
-        'CSV View',                  // page title
-        '',                          // empty menu label (won’t show in menu)
-        'manage_options',
-        'seo-csv-view',
-        'seo_csv_view_page'
-    );
-});
+
 
 
 
@@ -193,22 +241,26 @@ function seo_csv_view_page()
     global $wpdb, $table_prefix;
     $table_name = $table_prefix . "seo_csv_logs";
 
-    $csv_file_id = isset($_GET['csv_file_id']) ? intval($_GET['csv_file_id']) : 0;
+    $csv_file_id = isset($_GET['file_id']) ? intval($_GET['file_id']) : 0;
+    $csv_file_name = isset($_GET['file_name']) ? $_GET['file_name'] : '-';
 
     if (!$csv_file_id) {
-        echo '<div class="notice notice-error"><p>Invalid CSV File ID</p></div>';
+        echo '<div class="notice notice-error"><p>Invalid File ID</p></div>';
         return;
     }
 
-    echo '<div class="wrap"><h1>CSV File Details: ID ' . esc_html($csv_file_id) . '</h1>';
+    echo '<div class="wrap">
+        <h1>SEO Plugin Settings</h1>
+    </div>
+    <div class="wrap"><h2>File Details: ID ' . esc_html($csv_file_id) . ' and Name: ' . esc_html($csv_file_name) . '</h2><br>';
 
     $rows = $wpdb->get_results(
         $wpdb->prepare("SELECT * FROM $table_name WHERE csv_file_id = %d", $csv_file_id)
     );
 
     if ($rows) {
-        echo '<table class="widefat striped">';
-        echo '<thead><tr><th>Post URL</th><th>Meta Title</th><th>Meta Description</th><th>Status</th><th>Created At</th></tr></thead><tbody>';
+        echo '<table id="seo-log-table" class="widefat striped">';
+        echo '<thead><tr><th>Post URL</th><th>Meta Title</th><th>Meta Description</th><th>Status</th><th style="width:75px !important;">Updated At</th></tr></thead><tbody>';
 
         foreach ($rows as $row) {
             echo '<tr>';
@@ -216,7 +268,8 @@ function seo_csv_view_page()
             echo '<td>' . esc_html($row->meta_title ?: '—') . '</td>';
             echo '<td>' . esc_html($row->meta_description ?: '—') . '</td>';
             echo '<td>' . esc_html($row->status ? '✅' : '❌') . '</td>';
-            echo '<td>' . esc_html($row->created_at) . '</td>';
+            echo '<td>' . date('d M, Y', strtotime($row->created_at)) . '<br>' . date('H:i:s', strtotime($row->created_at)) . '</td>';
+
             echo '</tr>';
         }
 
@@ -225,9 +278,25 @@ function seo_csv_view_page()
         echo '<p>No data found for this CSV file.</p>';
     }
 
-    echo '<p><a href="' . admin_url('admin.php?page=seo-csv-main') . '" class="button">← Back to CSV List</a></p>';
+    echo '<p><a href="' . admin_url('admin.php?page=csv-seo-settings') . '" class="button">← Back to CSV List</a></p>';
     echo '</div>';
 }
+add_action('admin_enqueue_scripts', function () {
+    if (isset($_GET['page']) && $_GET['page'] === 'seo-csv-view') {
+        wp_enqueue_script('datatables-js', 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js', ['jquery'], null, true);
+        wp_enqueue_style('datatables-css', 'https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css');
+
+        wp_add_inline_script('datatables-js', "
+            jQuery(document).ready(function($) {
+                $('#seo-log-table').DataTable({
+                    pageLength: 10,
+                    order: [[4, 'desc']]
+                });
+            });
+        ");
+    }
+});
+
 
 //////////////////////////// create a webhook end point ///////////
 
@@ -449,7 +518,7 @@ function seo_csv_data_modal_markup()
 {
     $screen = get_current_screen();
     if ($screen->id !== 'plugins') return;
-    ?>
+?>
     <div id="seo-csv-details-modal" style="display:none; position: fixed; top: 10%; left: 50%; transform: translateX(-50%);
         background: #fff; border: 1px solid #ccc; padding: 20px; width: 600px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
         <h2>SEO CSV Plugin Details</h2>
@@ -564,4 +633,3 @@ function delete_seo_csv_file(WP_REST_Request $request)
         ], 404);
     }
 }
-

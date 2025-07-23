@@ -1,0 +1,26 @@
+hr {
+    margin: 16px 0px;
+}
+
+h2 {
+    font-size: 20px;
+}
+
+hr {
+    margin-top: 20px;
+    border-top: 1px solid #babacd;
+
+}
+
+/* style.css */
+.wrap h1 {
+    color: #2271b1;
+    font-size: 24px;
+}
+
+.seo-csv-font-15 {
+    font-size: 15px;
+}
+table.dataTable thead th, table.dataTable tfoot th {
+    font-weight: 400!important;
+}
