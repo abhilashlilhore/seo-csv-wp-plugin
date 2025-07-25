@@ -21,6 +21,12 @@ hr {
 .seo-csv-font-15 {
     font-size: 15px;
 }
-table.dataTable thead th, table.dataTable tfoot th {
-    font-weight: 400!important;
+
+table.dataTable thead th,
+table.dataTable tfoot th {
+    font-weight: 400 !important;
+}
+
+.dataTables_wrapper .dataTables_length select {
+    padding: 3px 16px !important;
 }

@@ -22,7 +22,6 @@ include_once(plugin_dir_path(__FILE__) . 'api-authentication.php');
 function activetion_seo_csv_plugin()
 {
 
-
     global $wpdb, $table_prefix;
 
     $table_name = $table_prefix . "seo_csv_logs";
@@ -110,8 +109,6 @@ function seo_csv_plugin_enqueue_admin_css($hook)
     }
 }
 add_action('admin_enqueue_scripts', 'seo_csv_plugin_enqueue_admin_css');
-
-
 
 function seo_detector_detect_seo_plugins()
 {
@@ -224,19 +221,12 @@ function seo_detector_settings_page()
     }
 }
 
-?>
-
-<?php
-
-
-
-
 
 function seo_csv_view_page()
 {
-    // if (!current_user_can('manage_options')) {
-    //     return;
-    // }
+    if (!current_user_can('manage_options')) {
+        return;
+    }
 
     global $wpdb, $table_prefix;
     $table_name = $table_prefix . "seo_csv_logs";
@@ -531,7 +521,7 @@ function seo_csv_data_modal_markup()
             <li>Get Token via endpoint: <code>/wp-json/seo-csv-data/v1/token</code></li>
             <li>Submit CSV URL to process and update SEO data using: <code>/wp-json/seo-csv-data/v1/webhook</code></li>
             <li>Supports CSV</li>
-            <li>Optional <code>response_hook_url</code> to receive processing results via POST callback</li>
+            <li>Requird <code>response_hook_url</code> to receive processing results via POST callback</li>
             <li>Confirms completion with: <code>/wp-json/seo-csv-data/v1/csv-reading-completed</code></li>
             <li>CSV output includes updated SEO meta titles and descriptions</li>
             <li>Compatible with Yoast SEO and Rank Math plugins</li>
