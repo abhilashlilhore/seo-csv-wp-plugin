@@ -73,13 +73,13 @@ function myplugin_add_settings_page()
     );
 }
 add_action('admin_menu', function () {
-   // add_menu_page('SEO CSV Main', '', 'manage_options', 'seo-csv-main', 'seo_csv_main_page');
+    // add_menu_page('SEO CSV Main', '', 'manage_options', 'seo-csv-main', 'seo_csv_main_page');
 
     // Use the same slug as the parent
     add_submenu_page(
         'seo-csv-main',
-        'CSV View', 
-        '',                
+        'CSV View',
+        '',
         'manage_options',
         'seo-csv-view',
         'seo_csv_view_page'
@@ -192,7 +192,7 @@ function seo_detector_settings_page()
         <h2 style="margin-top:40px;">All uploaded CSV files</h2><br>
 
     </div>
-<?php
+    <?php
     global $wpdb, $table_prefix;
     $table_name = $table_prefix . "seo_csv_logs";
 
@@ -251,9 +251,10 @@ function seo_csv_view_page()
     if ($rows) {
         echo '<table id="seo-log-table" class="widefat striped">';
         echo '<thead><tr><th>Post URL</th><th>Meta Title</th><th>Meta Description</th><th>Status</th><th style="width:75px !important;">Updated At</th></tr></thead><tbody>';
-
+        $sno = 1;
         foreach ($rows as $row) {
             echo '<tr>';
+            echo '<td>' . esc_html($sno++) . '</td>';
             echo '<td><a href="' . esc_url($row->post_url) . '" target="_blank">' . esc_html($row->post_url) . '</a></td>';
             echo '<td>' . esc_html($row->meta_title ?: '—') . '</td>';
             echo '<td>' . esc_html($row->meta_description ?: '—') . '</td>';
@@ -279,8 +280,8 @@ add_action('admin_enqueue_scripts', function () {
         wp_add_inline_script('datatables-js', "
             jQuery(document).ready(function($) {
                 $('#seo-log-table').DataTable({
-                    pageLength: 10,
-                    order: [[4, 'desc']]
+                    pageLength: 10
+                    order: [[0, 'desc']]
                 });
             });
         ");
@@ -406,9 +407,11 @@ function seo_csv_background_process(WP_REST_Request $request)
     chmod($csv_file_path, 0644);
 
     $csv_rows = array_map('str_getcsv', explode("\n", trim($csv_content)));
-
+    $index = 0;
     foreach ($csv_rows as $row) {
-        if (empty($row[0])) continue;
+
+        if ($index++ === 0) continue; // skip the first row
+        if (empty($row[0])) continue; ///empty url
 
         $column_id = trim($row[0]);
         $csv_file_id = trim($row[1] ?? '');
@@ -508,7 +511,7 @@ function seo_csv_data_modal_markup()
 {
     $screen = get_current_screen();
     if ($screen->id !== 'plugins') return;
-?>
+    ?>
     <div id="seo-csv-details-modal" style="display:none; position: fixed; top: 10%; left: 50%; transform: translateX(-50%);
         background: #fff; border: 1px solid #ccc; padding: 20px; width: 600px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
         <h2>SEO CSV Plugin Details</h2>
