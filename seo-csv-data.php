@@ -3,7 +3,7 @@
 /**
  * Plugin Name: CSV SEO Data
  * Description: This plugin updates meta data for the Rank Math and Yoast SEO plugins. 
- * Version: 1.4.4
+ * Version: 1.4.6
  * Author: Savior marketing pvt. ltd.
  * Author URI:https://savior.im/
  * 
@@ -532,7 +532,7 @@ function seo_csv_data_modal_markup()
     <div id="seo-csv-details-modal" style="display:none; position: fixed; top: 10%; left: 50%; transform: translateX(-50%);
         background: #fff; border: 1px solid #ccc; padding: 20px; width: 600px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
         <h2>SEO CSV Plugin Details</h2>
-        <p><strong>Version:</strong> 1.4.4</p>
+        <p><strong>Version:</strong> 1.4.6</p>
         <p><strong>Author:</strong> Savior marketing pvt. ltd.</p>
         <p><strong>Description:</strong>This plugin allows you to bulk update SEO meta titles and descriptions from a CSV file. Supports Yoast & Rank Math integration.</p>
         <p><strong>API-Document:</strong></p>
