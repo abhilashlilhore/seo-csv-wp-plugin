@@ -15,6 +15,7 @@ add_filter('jwt_auth_whitelist', function ($endpoints) {
     $endpoints[] = '/wp-json/seo-csv-data/v1/token';
     $endpoints[] = '/wp-json/seo-csv-data/v1/webhook';
     $endpoints[] = '/wp-json/seo-csv-data/v1/csv-reading-completed';
+    $endpoints[] = '/wp-json/seo-csv-data/v1/check-credentials';
     return $endpoints;
 });
 // remove this url from other auth jwt plugins
@@ -26,7 +27,35 @@ add_action('rest_api_init', function () {
         'callback' => 'seo_csv_generate_token',
         'permission_callback' => '__return_true', // allow public
     ]);
+
+    register_rest_route('seo-csv-data/v1', '/check-credentials', [
+        'methods' => 'POST',
+        'callback' => 'check_wp_credentials',
+        'permission_callback' => '__return_true',
+    ]);
 });
+
+
+function check_wp_credentials($request)
+{
+
+    check_allowed_content_origin();
+
+    $params = $request->get_json_params();
+    $username = $params['username'] ?? '';
+    $password = $params['password'] ?? '';
+
+    $user = wp_authenticate($username, $password);
+
+    if (is_wp_error($user) || !user_can($user, 'administrator')) {
+        return new WP_REST_Response(['error' => 'Invalid credentials or not admin'], 403);
+    }   
+
+    return new WP_REST_Response([
+        'status' => true,
+        'user_id' => $user->ID,
+    ]);
+}
 
 function base64url_encode($data)
 {
@@ -45,6 +74,8 @@ function check_allowed_content_origin()
         }
     }
 }
+
+
 
 function seo_csv_generate_token($request)
 {

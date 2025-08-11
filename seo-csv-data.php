@@ -3,7 +3,7 @@
 /**
  * Plugin Name: CSV SEO Data
  * Description: This plugin updates meta data for the Rank Math and Yoast SEO plugins. 
- * Version: 1.0
+ * Version: 1.4.4
  * Author: Savior marketing pvt. ltd.
  * Author URI:https://savior.im/
  * 
@@ -73,13 +73,13 @@ function myplugin_add_settings_page()
     );
 }
 add_action('admin_menu', function () {
-   // add_menu_page('SEO CSV Main', '', 'manage_options', 'seo-csv-main', 'seo_csv_main_page');
+    // add_menu_page('SEO CSV Main', '', 'manage_options', 'seo-csv-main', 'seo_csv_main_page');
 
     // Use the same slug as the parent
     add_submenu_page(
         'seo-csv-main',
-        'CSV View', 
-        '',                
+        'CSV View',
+        '',
         'manage_options',
         'seo-csv-view',
         'seo_csv_view_page'
@@ -192,7 +192,7 @@ function seo_detector_settings_page()
         <h2 style="margin-top:40px;">All uploaded CSV files</h2><br>
 
     </div>
-<?php
+    <?php
     global $wpdb, $table_prefix;
     $table_name = $table_prefix . "seo_csv_logs";
 
@@ -208,7 +208,7 @@ function seo_detector_settings_page()
             echo '<tr>';
             echo '<td>' . esc_html($file->csv_file_id) . '</td>';
             echo '<td> ' . esc_html($csv_file_name) . ' </td>';
-            echo '<td><a class="button" href="' . esc_url($file->csv_url) . '" target="_blank">Download original file</a>
+            echo '<td>
             <a class="button" href="' . admin_url('admin.php?page=seo-csv-view&file_id=' . esc_attr($file->csv_file_id) . '&file_name=' . esc_attr($csv_file_name)) . '">View</a>
             </td>';
 
@@ -250,10 +250,11 @@ function seo_csv_view_page()
 
     if ($rows) {
         echo '<table id="seo-log-table" class="widefat striped">';
-        echo '<thead><tr><th>Post URL</th><th>Meta Title</th><th>Meta Description</th><th>Status</th><th style="width:75px !important;">Updated At</th></tr></thead><tbody>';
-
+        echo '<thead><tr><th>S No.</th><th>Post URL</th><th>Meta Title</th><th>Meta Description</th><th>Status</th><th style="width:75px !important;">Updated At</th></tr></thead><tbody>';
+        $sno = 1;
         foreach ($rows as $row) {
             echo '<tr>';
+            echo '<td>' . esc_html($sno++) . '</td>';
             echo '<td><a href="' . esc_url($row->post_url) . '" target="_blank">' . esc_html($row->post_url) . '</a></td>';
             echo '<td>' . esc_html($row->meta_title ?: '—') . '</td>';
             echo '<td>' . esc_html($row->meta_description ?: '—') . '</td>';
@@ -280,7 +281,7 @@ add_action('admin_enqueue_scripts', function () {
             jQuery(document).ready(function($) {
                 $('#seo-log-table').DataTable({
                     pageLength: 10,
-                    order: [[4, 'desc']]
+                    order: [[0, 'asc']]
                 });
             });
         ");
@@ -334,7 +335,7 @@ function read_seo_sheet_csv($url)
 
 function seo_csv_handle_webhook(WP_REST_Request $request)
 {
-    check_allowed_content_origin();
+
 
     $data = $request->get_json_params();
     $required_fields = ['csv_url', 'responce_hook_url', 'website_id', 'csv_file_id'];
@@ -405,10 +406,29 @@ function seo_csv_background_process(WP_REST_Request $request)
     file_put_contents($csv_file_path, $csv_content);
     chmod($csv_file_path, 0644);
 
-    $csv_rows = array_map('str_getcsv', explode("\n", trim($csv_content)));
+   // $csv_rows = array_map('str_getcsv', explode("\n", trim($csv_content)));
+   // 
+   
+	$csv_rows = [];
 
+$tmp_filename = tempnam(sys_get_temp_dir(), 'csv_');
+file_put_contents($tmp_filename, mb_convert_encoding($csv_content, 'UTF-8', 'auto'));
+
+$handle = fopen($tmp_filename, 'r');
+if ($handle !== false) {
+    while (($row = fgetcsv($handle)) !== false) {
+        $csv_rows[] = $row;
+    }
+    fclose($handle);
+}
+
+// Clean up temp file
+unlink($tmp_filename);
+
+    $index = 0;
     foreach ($csv_rows as $row) {
-        if (empty($row[0])) continue;
+        if ($index++ === 0) continue; // skip the first row
+        if (empty($row[0])) continue; ///empty url
 
         $column_id = trim($row[0]);
         $csv_file_id = trim($row[1] ?? '');
@@ -508,11 +528,11 @@ function seo_csv_data_modal_markup()
 {
     $screen = get_current_screen();
     if ($screen->id !== 'plugins') return;
-?>
+    ?>
     <div id="seo-csv-details-modal" style="display:none; position: fixed; top: 10%; left: 50%; transform: translateX(-50%);
         background: #fff; border: 1px solid #ccc; padding: 20px; width: 600px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
         <h2>SEO CSV Plugin Details</h2>
-        <p><strong>Version:</strong> 1.0.0</p>
+        <p><strong>Version:</strong> 1.4.4</p>
         <p><strong>Author:</strong> Savior marketing pvt. ltd.</p>
         <p><strong>Description:</strong>This plugin allows you to bulk update SEO meta titles and descriptions from a CSV file. Supports Yoast & Rank Math integration.</p>
         <p><strong>API-Document:</strong></p>
