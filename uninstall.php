@@ -1,6 +1,6 @@
 <?php
 /**
- * seo-csv-data plugin file
+ * Savior SEO - Meta Manager plugin file
  */
 
 if(!defined('WP_UNINSTALL_PLUGIN')){
@@ -10,7 +10,7 @@ if(!defined('WP_UNINSTALL_PLUGIN')){
 
 global $wpdb, $table_prefix;
 
-    $wpdb_table = $table_prefix . 'seo_csv_logs';
+    $wpdb_table = $table_prefix . 'savior_seo_meta_logs';
 
     $query = "DROP TABLE IF EXISTS $wpdb_table";
 
@@ -18,7 +18,7 @@ global $wpdb, $table_prefix;
 
 delete_option('allow_access_origin');
 
-$seo_base_dir = WP_CONTENT_DIR . "/seo-csv-data/";
+$seo_base_dir = WP_CONTENT_DIR . "/savior-seo-meta-manager/";
 
 // Recursive deletion function
 function delete_directory_recursive($dir)

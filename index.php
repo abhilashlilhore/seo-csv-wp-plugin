@@ -1,5 +1,5 @@
 <?php
 /**
  * this is index page
- * seo-csv-data plugin file
+ * Savior SEO - Meta Manager plugin file
  */

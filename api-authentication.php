@@ -1,7 +1,9 @@
 <?php
 
 /**
- * seo-csv-data plugin file
+ *  
+ * Savior SEO - Meta Manager plugin file
+ *
  */
 
 if (!defined("ABSPATH")) {
@@ -27,14 +29,12 @@ add_action('rest_api_init', function () {
         'callback' => 'seo_csv_generate_token',
         'permission_callback' => '__return_true', // allow public
     ]);
-
     register_rest_route('seo-csv-data/v1', '/check-credentials', [
         'methods' => 'POST',
         'callback' => 'check_wp_credentials',
         'permission_callback' => '__return_true',
     ]);
 });
-
 
 function check_wp_credentials($request)
 {
@@ -49,13 +49,14 @@ function check_wp_credentials($request)
 
     if (is_wp_error($user) || !user_can($user, 'administrator')) {
         return new WP_REST_Response(['error' => 'Invalid credentials or not admin'], 403);
-    }   
+    }
 
     return new WP_REST_Response([
         'status' => true,
         'user_id' => $user->ID,
     ]);
 }
+
 
 function base64url_encode($data)
 {
@@ -74,8 +75,6 @@ function check_allowed_content_origin()
         }
     }
 }
-
-
 
 function seo_csv_generate_token($request)
 {
@@ -149,4 +148,3 @@ function seo_csv_check_auth()
     wp_set_current_user($user_id);
     return true;
 }
-
